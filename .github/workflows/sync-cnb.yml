@@ -31,8 +31,11 @@ jobs:
             git branch --track "$ref" "origin/$ref" 2>/dev/null || true
           done
 
-          git push cnb --all
-          git push cnb --tags
+          # 本仓库是 GitHub → CNB 的单向镜像：GitHub 侧为权威源。
+          # CNB 侧若已有独立提交（如建仓时的初始化提交），普通推送会因非快进被拒，
+          # 故此处强制对齐。若日后需要保留 CNB 侧内容，应先人工合并再改回普通推送。
+          git push cnb --all --force
+          git push cnb --tags --force
 
           # 如果有 LFS 大文件再补这两行
           git lfs fetch --all origin
