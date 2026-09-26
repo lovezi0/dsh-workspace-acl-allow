@@ -1,0 +1,6 @@
+# dsh-workspace-acl-allow bundle patch：一个 insert 注册本插件。
+# insert.name 必须是【包名】（dsh plugin add 后由 profile 的 node_modules 解析到 lib/index.js）；
+# insert.id 必须与入口导出的 cordis `name`（'workspace-acl-allow'）一致。
+- insert:
+    - id: workspace-acl-allow
+      name: 'dsh-workspace-acl-allow'
