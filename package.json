@@ -19,6 +19,16 @@
     "registry": "https://registry.npmjs.org/"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lovezi0/dsh-workspace-acl-allow.git"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "windows",
+    "acl"
+  ],
   "engines": {
     "node": ">=20"
   },
