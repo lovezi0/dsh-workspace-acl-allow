@@ -54,6 +54,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "selftest": "node scripts/selftest.mjs",
     "prepublishOnly": "npm run build"
   }
 }

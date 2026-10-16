@@ -1,0 +1,55 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # 本包零构建依赖（scripts/build.mjs 只用 node 内置），仓库也不含 lockfile，
+      # 故不设 install / cache 步骤：装依赖只会去解析由装载 profile 提供的 peer，
+      # 而发布内容不含任何 node_modules。
+      - name: Verify tag matches package version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${pkg}"
+            exit 1
+          fi
+
+      # lib/ 随仓库提交：自检先于构建，可拦住「改了 src 却忘跑 build 就提交」。
+      # 构建本身幂等，随后的 npm publish 还会经 prepublishOnly 再构建一次。
+      - name: Self-test
+        run: npm run selftest
+
+      - name: Build
+        run: npm run build
+
+      # 预发布版本按后缀推导 dist-tag（0.1.1-alpha.1 → alpha），稳定版发布到 latest。
+      - name: Resolve dist-tag
+        run: |
+          pkg="$(node -p 'require("./package.json").version')"
+          case "$pkg" in
+            *-*) dist_tag="$(node -p "require('./package.json').version.split('-')[1].split('.')[0]")" ;;
+            *)   dist_tag="latest" ;;
+          esac
+          echo "dist_tag=$dist_tag" >> "$GITHUB_ENV"
+
+      # 经 npm Trusted Publishing（OIDC）发布，无需 NPM_TOKEN。
+      - name: Publish
+        run: npm publish --tag "$dist_tag"

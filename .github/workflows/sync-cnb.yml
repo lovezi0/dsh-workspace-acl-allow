@@ -2,7 +2,6 @@ name: sync-to-cnb
 on:
   push:
     branches: ["*"]
-    tags: ["*"]
   workflow_dispatch:
 
 jobs:
@@ -14,7 +13,7 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      - name: Sync branches and tags to CNB
+      - name: Sync branches to CNB
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
         run: |
@@ -35,7 +34,6 @@ jobs:
           # CNB 侧若已有独立提交（如建仓时的初始化提交），普通推送会因非快进被拒，
           # 故此处强制对齐。若日后需要保留 CNB 侧内容，应先人工合并再改回普通推送。
           git push cnb --all --force
-          git push cnb --tags --force
 
           # 如果有 LFS 大文件再补这两行
           git lfs fetch --all origin
