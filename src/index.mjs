@@ -77,40 +77,70 @@ function isLoopbackHostname(hostname) {
     && parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 }
 
+/** 解析裸 authority（host 或 host:port）；协议决定哪个端口算默认端口。 */
+function parseAuthority(value, protocol) {
+  try {
+    return new URL(`${protocol}//${value}`);
+  } catch {
+    return null;
+  }
+}
+
 /** 可信条目未带端口时只比主机名，带端口时比完整 authority。 */
-function authorityMatches(hostUrl, entry) {
+function authorityMatches(hostUrl, entry, protocol) {
   const raw = String(entry).trim();
   if (raw.length === 0) return false;
-  let entryUrl;
-  try {
-    entryUrl = new URL(`http://${raw}`);
-  } catch {
-    return false;
-  }
+  const entryUrl = parseAuthority(raw, protocol);
+  if (entryUrl === null) return false;
   return /:\d+$/.test(raw) ? entryUrl.host === hostUrl.host : entryUrl.hostname === hostUrl.hostname;
 }
 
-function isTrustedRequest(request, trustedHosts) {
-  const host = headerValue(request?.headers, "host");
-  if (typeof host !== "string" || host.length === 0) return false;
-  let hostUrl;
+/**
+ * 监听绑定地址本身也是自身 authority：浏览器按该地址直连时 Host 就是它。
+ * 端口不参与比较；IPv6 的 %zone 只选择接口，不属于地址文本。
+ */
+function matchesBindAddress(hostUrl, bindHost) {
+  if (typeof bindHost !== "string" || bindHost.length === 0) return false;
+  const zoneAt = bindHost.indexOf("%");
+  const address = zoneAt === -1 ? bindHost : bindHost.slice(0, zoneAt);
+  const bindUrl = parseAuthority(address.includes(":") ? `[${address}]` : address, "http:");
+  return bindUrl !== null && bindUrl.hostname === hostUrl.hostname;
+}
+
+/**
+ * Origin 必须正好是本监听自身的 authority。按 Origin 的协议解析 Host，
+ * 使两侧对默认端口采取同一归一规则；非 http(s) 协议不能命名本监听。
+ */
+function isSameAuthorityOrigin(origin, host, protocol) {
+  let originUrl;
   try {
-    hostUrl = new URL(`http://${host}`);
+    originUrl = new URL(origin);
   } catch {
     return false;
   }
+  const scheme = originUrl.protocol === "https:" ? "https:"
+    : originUrl.protocol === "http:" ? "http:"
+      : undefined;
+  if (scheme === undefined) return false;
+  const hostUrl = parseAuthority(host, scheme);
+  return hostUrl !== null && originUrl.host === hostUrl.host;
+}
+
+function isTrustedRequest(request, trustedHosts, bindHost, protocol = "http:") {
+  const host = headerValue(request?.headers, "host");
+  if (typeof host !== "string" || host.length === 0) return false;
+  const hostUrl = parseAuthority(host, protocol);
+  if (hostUrl === null) return false;
   const trusted = Array.isArray(trustedHosts) ? trustedHosts : [];
-  if (!isLoopbackHostname(hostUrl.hostname) && !trusted.some((entry) => authorityMatches(hostUrl, entry))) {
+  if (!isLoopbackHostname(hostUrl.hostname)
+    && !trusted.some((entry) => authorityMatches(hostUrl, entry, protocol))
+    && !matchesBindAddress(hostUrl, bindHost)) {
     return false;
   }
   if (headerValue(request.headers, "sec-fetch-site") === "cross-site") return false;
   const origin = headerValue(request.headers, "origin");
   if (origin === undefined) return true;
-  try {
-    return new URL(origin).host === hostUrl.host;
-  } catch {
-    return false;
-  }
+  return isSameAuthorityOrigin(origin, host, protocol);
 }
 
 /** 解包 volatile 配置引用；直接给值时原样返回，两种形态都能读。 */
@@ -544,7 +574,9 @@ export function apply(ctx, config) {
   }
 
   function trusted(request, response) {
-    if (isTrustedRequest(request, ctx.webStartup?.trustedHosts ?? [])) return true;
+    const startup = ctx.webStartup;
+    const protocol = startup?.tls === undefined ? "http:" : "https:";
+    if (isTrustedRequest(request, startup?.trustedHosts ?? [], startup?.host, protocol)) return true;
     logger.warn(`rejected untrusted request: ${String(request?.url ?? "")}`);
     sendJson(response, 403, { ok: false, error: "forbidden" });
     return false;

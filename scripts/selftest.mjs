@@ -32,7 +32,9 @@ check('导出 apply 与 Config', /export function apply\(/.test(libEntry) && /ex
 
 console.log('C. 元数据与打包');
 const pkg = JSON.parse(read('package.json'));
-check('peer 声明宿主最低版本', pkg.peerDependencies?.['@deepseek-ai/dsh'] === '>=0.2.1-alpha.1', String(pkg.peerDependencies?.['@deepseek-ai/dsh']));
+check('engines.dsh 声明宿主最低版本', pkg.engines?.dsh === '>=0.2.1-alpha.1', String(pkg.engines?.dsh));
+check('dsh 版本不在 peer 中重复声明', pkg.peerDependencies?.['@deepseek-ai/dsh'] === undefined);
+check('schemastery 仍作为 peer 由 profile 提供', typeof pkg.peerDependencies?.['@deepseek-ai/schemastery'] === 'string');
 check('files 含 lib 与 cordis.patch.yml', Array.isArray(pkg.files) && pkg.files.includes('lib') && pkg.files.includes('cordis.patch.yml'));
 check('publishConfig 指向 npm 官方源', pkg.publishConfig?.registry === 'https://registry.npmjs.org/');
 
